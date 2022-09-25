@@ -3,13 +3,14 @@
 
 # Import of modules
 import numpy as np
+from scipy import signal
 from scipy.fftpack import dct
 
 
 def split_meta_line(line, delimiter=' '):
     # First you need to prepare split_meta_line function for meta line parsing
     # line format is "Speaker_ID Gender Path"
-    
+
     """
     :param line: lines of metadata
     :param delimiter: delimeter
@@ -17,8 +18,7 @@ def split_meta_line(line, delimiter=' '):
     """
 
     ###########################################################
-    # Here is your code
-
+    speaker_id, gender, file_path = line.replace('\n', '').split(delimiter)
     ###########################################################
 
     return speaker_id, gender, file_path
@@ -33,8 +33,7 @@ def preemphasis(signal, pre_emphasis=0.97):
     """
 
     ###########################################################
-    # Here is your code
-
+    emphasized_signal = np.concatenate((np.array([signal[0]]), signal[1:] - pre_emphasis*signal[:-1]))
     ###########################################################
 
     return emphasized_signal
@@ -42,7 +41,7 @@ def preemphasis(signal, pre_emphasis=0.97):
 def framing(emphasized_signal, sample_rate=16000, frame_size=0.025, frame_stride=0.01):
     # Here you need to perform framing of the input signal emphasized_signal with sample rate sample_rate
     # Please use hamming windowing
-    
+
     """
     :param emphasized_signal: signal after pre-emphasis procedure
     :param sample_rate: signal sampling rate
@@ -64,14 +63,15 @@ def framing(emphasized_signal, sample_rate=16000, frame_size=0.025, frame_stride
                                                  # truncating any samples from the original signal
 
     ###########################################################
-    # Here is your code to compute frames
-
+    hamming = signal.hamming(frame_length)
+    frames = np.array([hamming*pad_signal[idx:idx+frame_length]
+                       for idx in range(0, signal_length-frame_step-1, frame_step)])
     ###########################################################
 
     return frames
 
 def power_spectrum(frames, NFFT=512):
-    # Here you need to compute power spectum of framed signal with NFFT fft bins number
+    # Here you need to compute power spectrum of framed signal with NFFT fft bins number
 
     """
     :param frames: framed signal
@@ -82,8 +82,7 @@ def power_spectrum(frames, NFFT=512):
     mag_frames = np.absolute(np.fft.rfft(frames, NFFT))  # Magnitude of the FFT
 
     ###########################################################
-    # Here is your code to compute pow_frames
-
+    pow_frames = np.square(mag_frames) / NFFT
     ###########################################################
 
     return pow_frames
@@ -97,14 +96,14 @@ def compute_fbank_filters(nfilt=40, sample_rate=16000, NFFT=512):
     :param NFFT: number of fft bins in power spectrum
     :return: fbank [nfilt x (NFFT/2+1)]
     """
-    
+
     low_freq_mel = 0
     high_freq = sample_rate / 2
 
     ###########################################################
     # Here is your code to convert Convert Hz to Mel: 
     # high_freq -> high_freq_mel
-    
+    high_freq_mel = 1125 * np.log(1 + high_freq/700)
     ###########################################################
 
     mel_points = np.linspace(low_freq_mel, high_freq_mel, nfilt + 2) # equally spaced in mel scale
@@ -112,7 +111,7 @@ def compute_fbank_filters(nfilt=40, sample_rate=16000, NFFT=512):
     ###########################################################
     # Here is your code to convert Convert Mel to Hz: 
     # mel_points -> hz_points
-    
+    hz_points = 700 * (np.exp(mel_points/1125)-1)
     ###########################################################
 
     bin = np.floor((NFFT + 1) * hz_points / sample_rate)
@@ -132,16 +131,16 @@ def compute_fbank_filters(nfilt=40, sample_rate=16000, NFFT=512):
 
 def compute_fbanks_features(pow_frames, fbank):
     # You need to compute fbank features using power spectrum frames and suitable fbanks filters
-    
+
     """
     :param pow_frames: framed signal power spectrum, matrix [nframes x sample_rate*frame_size]
     :param fbank: matrix of the fbank filters [nfilt x (NFFT/2+1)] where NFFT: number of fft bins in power spectrum
     :return: filter_banks_features: log mel FB energies matrix [nframes x nfilt]
     """
-    
+
     ###########################################################
     # Here is your code to compute filter_banks_features
-    
+    filter_banks_features = np.dot(pow_frames, fbank.T)
     ###########################################################
 
     filter_banks_features = np.where(filter_banks_features == 0, np.finfo(float).eps,
@@ -152,23 +151,30 @@ def compute_fbanks_features(pow_frames, fbank):
 
 def compute_mfcc(filter_banks_features, num_ceps=20):
     # Here you need to compute MFCCs features using precomputed log mel FB energies matrix
-    
+
     """
     :param filter_banks_features: log mel FB energies matrix [nframes x nfilt]
     :param num_ceps: number of cepstral components for MFCCs
     :return: mfcc: mel-frequency cepstral coefficients (MFCCs)
     """
-    
+
     ###########################################################
     # Here is your code to compute mfcc features
-    
+    # mfcc = dct(filter_banks_features, type=2, axis=1, norm='ortho')[:, :num_ceps]
+    result = []
+    for t in filter_banks_features:
+        coef = []
+        for i in range(t.shape[0]):
+            coef.append((t * np.cos(np.pi * i * (np.arange(t.shape[0]) + 1 / 2) / t.shape[0])).sum())
+        result.append(np.array(coef))
+    mfcc = np.array(result)[:, :num_ceps]
     ###########################################################
 
     return mfcc
 
 def mvn_floating(features, LC, RC, unbiased=False):
     # Here you need to do mean variance normalization of the input features
-    
+
     """
     :param features: features matrix [nframes x nfeats]
     :param LC: the number of frames to the left defining the floating
@@ -176,7 +182,7 @@ def mvn_floating(features, LC, RC, unbiased=False):
     :param unbiased: biased or unbiased estimation of normalising sigma
     :return: normalised_features: normalised features matrix [nframes x nfeats]
     """
-    
+
     nframes, dim = features.shape
     LC = min(LC, nframes - 1)
     RC = min(RC, nframes - 1)
@@ -187,10 +193,9 @@ def mvn_floating(features, LC, RC, unbiased=False):
     f = (np.r_[f[RC:], np.repeat(f[[-1]], RC, axis=0)] - np.r_[np.zeros((LC + 1, dim)), f[:-LC - 1]]) / n
     s = (np.r_[s[RC:], np.repeat(s[[-1]], RC, axis=0)] - np.r_[np.zeros((LC + 1, dim)), s[:-LC - 1]]
          ) / (n - 1 if unbiased else n) - f ** 2 * (n / (n - 1) if unbiased else 1)
-    
     ###########################################################
     # Here is your code to compute normalised features
-    
+    normalised_features = (features - f) / (s ** 0.5)
     ###########################################################
 
     normalised_features[s == 0] = 0
