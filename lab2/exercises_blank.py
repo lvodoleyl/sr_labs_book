@@ -14,8 +14,12 @@ def load_vad_markup(path_to_rttm, signal, fs):
     vad_markup = np.zeros(len(signal)).astype('float32')
         
     ###########################################################
-    # Here is your code
-    
+    sec2num = lambda sec: int(round(float(sec)*fs))
+    with open(path_to_rttm, 'r') as f:
+        rttm = f.readlines()
+    for line in rttm:
+        _, _, _, start, duration, *other = line.replace('\n', '').split(' ')
+        vad_markup[sec2num(start):sec2num(start)+sec2num(duration)] = 1
     ###########################################################
     
     return vad_markup
@@ -23,11 +27,20 @@ def load_vad_markup(path_to_rttm, signal, fs):
 def framing(signal, window=320, shift=160):
     # Function to create frames from signal
     
-    shape   = (int((signal.shape[0] - window)/shift + 1), window)
-    frames  = np.zeros().astype('float32')
+    # shape   = (int((signal.shape[0] - window)/shift + 1), window)
+    # frames  = np.zeros().astype('float32')
 
     ###########################################################
-    # Here is your code
+    signal_length = len(signal)
+    num_frames = int(
+        np.ceil(float(np.abs(signal_length - window)) / shift))
+
+    pad_signal_length = num_frames * shift + window
+    z = np.zeros((pad_signal_length - signal_length))
+    pad_signal = np.append(signal, z)
+
+    frames = np.array([pad_signal[idx:idx + window]
+                       for idx in range(0, signal_length - shift - 1, shift)])
     
     ###########################################################
     
@@ -39,8 +52,7 @@ def frame_energy(frames):
     E = np.zeros(frames.shape[0]).astype('float32')
 
     ###########################################################
-    # Here is your code
-    
+    E = frames.sum(axis=1) # np.square(frames).sum(axis=1)
     ###########################################################
     
     return E
@@ -51,33 +63,35 @@ def norm_energy(E):
     E_norm = np.zeros(len(E)).astype('float32')
 
     ###########################################################
-    # Here is your code
+    E_norm = (E - E.mean()) / (E.var() ** 0.5)
     
     ###########################################################
     
     return E_norm
 
-def gmm_train(E, gauss_pdf, n_realignment):
+def gmm_train(E, gauss_pdf, n_realignment=10):
     # Function to train parameters of gaussian mixture model
     
     # Initialization gaussian mixture models
     w     = np.array([ 0.33, 0.33, 0.33])
     m     = np.array([-1.00, 0.00, 1.00])
     sigma = np.array([ 1.00, 1.00, 1.00])
-
+    count_frames = len(E)
     g = np.zeros([len(E), len(w)])
     for n in range(n_realignment):
-
+        ...
         # E-step
         ###########################################################
-        # Here is your code
-
+        eStep_get_g_i = lambda e: (w * gauss_pdf(e, m, sigma)) / (w * gauss_pdf(e, m, sigma)).sum()
+        g = np.array(list(map(eStep_get_g_i, E)))
         ###########################################################
 
         # M-step
         ###########################################################
-        # Here is your code
-
+        w = g.sum(axis=0) / count_frames
+        m = (g*np.repeat([E], 3, axis=0).T).sum(axis=0) / (count_frames * w)
+        sigma = np.array([(g.T[idx]*(E - m[idx])**2).sum() / (count_frames * w[idx]) for idx in range(3)])
+        sigma = np.sqrt(sigma)
         ###########################################################
         
     return w, m, sigma
@@ -88,8 +102,10 @@ def eval_frame_post_prob(E, gauss_pdf, w, m, sigma):
     g0 = np.zeros(len(E))
 
     ###########################################################
-    # Here is your code
-
+    #for idx in range():
+    #    g0[idx] = (w[0]*gauss_pdf(E[idx], m[0], sigma[0])) / (w*gauss_pdf(E[idx], m, sigma)).sum()
+    g0 = np.array([(w[0]*gauss_pdf(E[idx], m[0], sigma[0])) / (w*gauss_pdf(E[idx], m, sigma)).sum()
+                   for idx in range(len(E))])
     ###########################################################
             
     return g0
@@ -110,7 +126,7 @@ def energy_gmm_vad(signal, window, shift, gauss_pdf, n_realignment, vad_thr, mas
     E_norm = norm_energy(E)
     
     # Train parameters of gaussian mixture models
-    w, m, sigma = gmm_train(E_norm, gauss_pdf, n_realignment=10)
+    w, m, sigma = gmm_train(E_norm, gauss_pdf, n_realignment)
     
     # Estimate a posterior probability that frame isn't speech
     g0 = eval_frame_post_prob(E_norm, gauss_pdf, w, m, sigma)
@@ -148,7 +164,8 @@ def awgn(signal, sigma_noise):
     signal_noise = np.zeros(len(signal)).astype('float32')
     
     ###########################################################
-    # Here is your code
+    noise = np.random.normal(0, sigma_noise, len(signal))
+    signal_noise = signal + noise
     
     ###########################################################
     
