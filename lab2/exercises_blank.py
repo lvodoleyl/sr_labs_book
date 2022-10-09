@@ -152,7 +152,7 @@ def reverb(signal, impulse_response):
     signal_reverb = np.zeros(len(signal)).astype('float32')
     
     ###########################################################
-    # Here is your code
+    signal_reverb = signal.convolve(signal, impulse_response, mode='same')
     
     ###########################################################
     
