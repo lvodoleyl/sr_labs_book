@@ -31,7 +31,7 @@ def load_model(model, lines, save_path, reload=False):
 
         print('File %s is downloaded.'%outfile)
         
-    checkpoint = torch.load(os.path.join(save_path, 'baseline_v2_ap.model'))
+    checkpoint = torch.load(os.path.join(save_path, 'baseline_v2_ap.model'), map_location=torch.device('cpu'))
     
     model_weight = OrderedDict()
 

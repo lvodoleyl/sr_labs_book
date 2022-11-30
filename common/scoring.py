@@ -15,7 +15,7 @@ def extract_features(model, test_loader):
     feats = {}
 
     for idx, data in enumerate(test_loader):
-        inp1 = data[0][0].cuda()
+        inp1 = data[0][0]#.cuda()
         
         with torch.no_grad():
             ref_feat = model(inp1).detach().cpu()
@@ -38,8 +38,8 @@ def compute_scores(feats, lines):
 
         data = line.split()
 
-        ref_feat = feats[data[1]].cuda()
-        com_feat = feats[data[2]].cuda()
+        ref_feat = feats[data[1]]#.cuda()
+        com_feat = feats[data[2]]#.cuda()
 
         ref_feat = F.normalize(ref_feat, p=2, dim=1)
         com_feat = F.normalize(com_feat, p=2, dim=1)
